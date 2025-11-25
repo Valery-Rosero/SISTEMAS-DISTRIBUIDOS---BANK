@@ -1,3 +1,5 @@
+//Detecta transacciones de alto valor en Kafka y publica alertas en otro tópico
+
 const { Kafka } = require('kafkajs');
 
 const kafkaBroker = process.env.KAFKA_BROKER || 'localhost:9092';

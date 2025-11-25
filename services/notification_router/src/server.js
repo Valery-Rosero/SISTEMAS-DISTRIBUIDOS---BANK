@@ -1,3 +1,5 @@
+//Escucha transacciones en Kafka y, cuando finalizan ( COMPLETED o FAILED ), encola un mensaje de email en RabbitMQ para que email_worker lo envíe.
+
 const express = require('express');
 const amqplib = require('amqplib');
 const { Kafka } = require('kafkajs');

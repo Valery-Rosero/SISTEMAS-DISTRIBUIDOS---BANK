@@ -6,8 +6,10 @@ services:
     container_name: ledger_smtp
     restart: unless-stopped
     ports:
-      - "1025:1025"  # SMTP
+      - "1025:1025"  # Protocolo Simple de Transferencia de Correo
       - "8025:8025"  # Web UI
+
+# Servicio Zookeeper: Sncroniza y gestiona sistemas distribuidos complejos
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.1
     container_name: ledger_zookeeper
@@ -17,6 +19,7 @@ services:
     ports:
       - "2181:2181"
 
+# Servicio Kafka: Plataforma de transmisión de eventos distribuida
   kafka:
     image: confluentinc/cp-kafka:7.5.1
     container_name: ledger_kafka
@@ -32,6 +35,7 @@ services:
     ports:
       - "9092:9092"
 
+# Servicio RabbitMQ: Plataforma de mensajería asincrónica basada en el protocolo AMQP
   rabbitmq:
     image: rabbitmq:3-management
     container_name: ledger_rabbitmq
@@ -47,6 +51,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+
   transaction_api:
     build: ../services/transaction_api
     container_name: ledger_transaction_api
@@ -64,6 +70,7 @@ services:
       retries: 5
       start_period: 10s
 
+# Servicio Transaction Processor: Procesa transacciones financieras
   transaction_processor:
     build: ../services/transaction_processor
     container_name: ledger_transaction_processor

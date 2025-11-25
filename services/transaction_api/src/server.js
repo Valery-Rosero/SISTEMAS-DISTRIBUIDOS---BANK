@@ -1,3 +1,5 @@
+///Publica cada transferencia como comando en RabbitMQ ( transfer_commands ) para que otro servicio la procese.
+
 const express = require('express');
 const amqplib = require('amqplib');
 const { v4: uuidv4 } = require('uuid');
@@ -17,7 +19,7 @@ async function initRabbit() {
   console.log('[transaction_api] Conectado a RabbitMQ y cola preparada:', COMMAND_QUEUE);
 }
 
-app.use(express.json());
+app.use(express.json()); //Middleware para parsear JSON en el cuerpo de las peticiones ( req.body ).
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'transaction_api' }));
 

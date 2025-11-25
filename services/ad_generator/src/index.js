@@ -1,3 +1,4 @@
+// Protocolo estándar abierto y de mensajería para la comunicación entre diferentes sistemas y aplicaciones
 const amqplib = require('amqplib');
 
 // Lista de anuncios con destinatarios y asunto explícito
@@ -23,6 +24,7 @@ const amqpUrl = process.env.RABBITMQ_URL || 'amqp://localhost:5672';
 const EMAIL_QUEUE = 'email_queue';
 const PERIOD_MS = 30000;
 
+//Crea conexión y canal AMQP y asegura la cola email_queue como durable
 async function main() {
   console.log('[ad_generator] iniciando...');
   const conn = await amqplib.connect(amqpUrl);

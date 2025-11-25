@@ -25,17 +25,10 @@ http://localhost:8080/
 La tabla se actualiza por WebSocket en el puerto 8081.
 
 ✉️ 3. Promociones
-3.1. Opción rápida (MailHog para pruebas)
-docker compose -f "infra/docker-compose.yml" up -d --build smtp rabbitmq email_worker ad_generator
 
-UI de MailHog
-
-http://localhost:8025/
-
-3.2. Opción con Gmail
+3.1. Opción con Gmail
 Editar archivo:
 infra/env/email_worker.env
-
 
 Con:
 
@@ -124,7 +117,81 @@ Si Gmail bloquea 587/STARTTLS, usar:
 SMTP_PORT=465
 SMTP_SECURE=true
 
-
 Para reconstruir cualquier servicio:
 
 docker compose -f "infra/docker-compose.yml" up -d --build <servicio>
+
+🏗️ 9. Arquitectura y Flujo de Datos
+
+Flujo de Transacciones
+- Cliente envía `POST http://localhost:3000/transfer` con `{ from_user, to_user, amount, email? }`.
+- `transaction_api` publica el comando en RabbitMQ cola `transfer_commands`.
+- `transaction_processor` consume `transfer_commands`, simula resultado y publica eventos en Kafka tópico `transactions_log`.
+- `fraud_detector` consume `transactions_log` y, si `amount > 10000`, publica alerta en Kafka tópico `fraud_alerts`.
+- `dashboard_aggregator` consume `transactions_log` y `fraud_alerts`, mantiene estado en memoria y emite actualizaciones por WebSocket en `ws://localhost:8081`.
+- `dashboard_client` se conecta al WebSocket y muestra la tabla en `http://localhost:8080`.
+
+Flujo de Notificaciones y Promociones
+- `notification_router` escucha `transactions_log` y encola correos en RabbitMQ `email_queue` cuando la transacción termina (`COMPLETED`/`FAILED`).
+- `ad_generator` publica correos promocionales periódicos (cada ~30s) en `email_queue`.
+- `email_worker` consume `email_queue` y envía correos vía SMTP:
+  - MailHog: `SMTP_HOST=smtp`, `SMTP_PORT=1025`, UI en `http://localhost:8025`.
+  - Gmail: `SMTP_PROVIDER=gmail`, `SMTP_USER`, `SMTP_PASS` (App Password), `SMTP_PORT=465/587`.
+
+Servicios y Puertos
+- `transaction_api`: `3000` (HTTP)
+- `dashboard_client`: `8080` (HTTP)
+- `dashboard_aggregator`: `4000` (HTTP), `8081` (WebSocket)
+- `rabbitmq`: `5672` (AMQP), `15672` (Management UI)
+- `kafka`: `9092` (Broker), `zookeeper`: `2181`
+- `smtp` (MailHog): `1025` (SMTP), `8025` (UI)
+
+📥 10. Endpoints de Salud y Métricas
+- `GET http://localhost:3000/health` → `{ status: 'ok', service: 'transaction_api' }`
+- `GET http://localhost:4000/health` → `{ status: 'ok', service: 'dashboard_aggregator' }`
+- `GET http://localhost:4000/metrics` → Totales y timestamp
+- `GET http://localhost:8080/health` → `{ status: 'ok', service: 'dashboard_client' }`
+- `GET http://localhost:5000/health` → `{ status: 'ok', service: 'notification_router' }`
+
+🧪 11. Ejemplos de Transacciones (rápidos)
+- PowerShell (una sola transferencia):
+  `Invoke-RestMethod -Method Post -Uri 'http://localhost:3000/transfer' -ContentType 'application/json' -Body '{"from_user":"alice","to_user":"bob","amount":123.45,"email":"vale.roserom23@gmail.com"}'`
+- curl.exe (Windows):
+  `curl.exe -X POST http://localhost:3000/transfer -H "Content-Type: application/json" -d "{\"from_user\":\"alice\",\"to_user\":\"bob\",\"amount\":123.45,\"email\":\"vale.roserom23@gmail.com\"}"`
+
+📦 12. Variables de Entorno (infra/env/*.env)
+- `transaction_api.env`: `RABBITMQ_URL`
+- `transaction_processor.env`: `RABBITMQ_URL`, `KAFKA_BROKER`
+- `dashboard_aggregator.env`: `PORT`, `WS_PORT`, `KAFKA_BROKER`
+- `dashboard_client.env`: `PORT`
+- `fraud_detector.env`: `KAFKA_BROKER`, `THRESHOLD?`
+- `notification_router.env`: `RABBITMQ_URL`, `KAFKA_BROKER`, `PORT`
+- `email_worker.env`: `RABBITMQ_URL`, `SMTP_PROVIDER`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+- `ad_generator.env`: `RABBITMQ_URL`, `PERIOD_MS?`
+
+🩺 13. Troubleshooting
+- Kafka no conecta: inicia primero Zookeeper y Kafka
+  `docker compose -f "infra/docker-compose.yml" up -d zookeeper kafka`
+- WebSocket no actualiza: revisa `dashboard_aggregator`
+  `docker compose -f "infra/docker-compose.yml" logs -f dashboard_aggregator`
+- RabbitMQ rechazo/conexión: verifica contenedor y Management UI
+  `docker compose -f "infra/docker-compose.yml" ps` y `http://localhost:15672/`
+- Gmail bloqueado: usa App Password y puerto `465` con `SMTP_SECURE=true`.
+- Cambios de código no se reflejan: reconstruir servicio
+  `docker compose -f "infra/docker-compose.yml" up -d --build <servicio>`
+
+🧭 14. Formatos de Mensaje (referencia rápida)
+- Comando de transferencia (RabbitMQ `transfer_commands`):
+  `{ tx_id, from_user, to_user, amount, email?, created_at }`
+- Evento de transacción (Kafka `transactions_log`):
+  `{ tx_id, from_user, to_user, amount, status: 'COMPLETED'|'FAILED', email?, processed_at }`
+- Alerta de fraude (Kafka `fraud_alerts`):
+  `{ tx_id, reason: 'HIGH_VALUE_TRANSACTION', amount, at }`
+- Email (RabbitMQ `email_queue`):
+  `{ to, subject?, body?, tx_id? }`
+
+✅ 15. Validación de Extremo a Extremo
+- Transacciones: enviar 2–3 transferencias y verificar:
+  - `transaction_processor` procesa y publica en Kafka.
+  - `dashboard_aggregator` y `dashboard_client` muestran en tiempo real.
+- Promociones/Notificaciones: levantar `smtp`, `email_worker`, `ad_generator` y confirmar correos en `http://localhost:8025`.
